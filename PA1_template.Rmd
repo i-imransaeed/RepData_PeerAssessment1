@@ -1,25 +1,202 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "Imran Saeed"
+output:
+  html_document: default
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE)
+```
+
+## Questions to be answered:
+
+* What is mean total number of steps taken per day?
+* What is the average daily activity pattern?
+* Imputing missing values
+* Are there differences in activity patterns between weekdays and weekends?
+
+##  Installation and setup..
+###Installing and lodaing all the packages needed for this assignment. Will install only if not installed. 
+```{r package setup and installation}
+listOfPackages <- c("ggplot2","plyr")
+newPackages <- listOfPackages[!(listOfPackages %in% installed.packages()[,"Package"])]
+
+if(length(newPackages)) {
+	message(sprintf("Going to install package(s)[ %s ]\n", newPackages))
+	install.packages(newPackages) 
+} else {
+	message("All packages are already installed. Will skip install pahse")
+}
+
+
+## Load all of the package needed for this project.
+for(package in listOfPackages){
+  library(package, character.only = TRUE)
+}
+```
 
 
 ## Loading and preprocessing the data
 
+#### Generic variables 
 
+```{r Generic variables}
+
+zipDataFileName <- "repdata%2Fdata%2Factivity.zip"
+dataFileDir <- "repdata%2Fdata%2Factivity"
+zipDataFilePath <- paste0(getwd(),"/", zipDataFileName)
+dataFileName <- "activity.csv"
+dataFilePath <- paste0(getwd(),"/", dataFileName)
+```
+
+#### 1.1 Load the dataset
+```{r load data}
+if (!file.exists(zipDataFilePath)){
+  fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+  download.file(fileURL, zipDataFilePath, method="curl")
+}
+#### STEP 1.1 - Unzip previously obtained data
+if (file.exists(zipDataFilePath) & !file.exists(dataFileDir)) { 
+  unzip(zipDataFilePath) 
+}
+
+#### STEP 1.2 - Read the CSV data
+activityDataSet <- read.csv(dataFileName, sep = ",")
+
+```
+The variable names and the structure of the file are given by
+```{r activity details}
+
+names(activityDataSet)
+str(activityDataSet)
+
+
+activityDataSet$dateTime<- as.POSIXct(activityDataSet$date,  format="%Y-%m-%d")
+
+## clean data set where steps are not NAs
+cleanDataSet <- activityDataSet[!is.na(activityDataSet$steps),]
+head(cleanDataSet)
+
+```
 
 ## What is mean total number of steps taken per day?
+```{r activity steps per day}
+stepsPerDay <- aggregate(steps ~ date, activityDataSet, FUN = sum, na.rm=TRUE)
+
+ggplot(stepsPerDay, aes(steps)) + geom_histogram(bins = 30) 
+
+```
+
+Summery of data set.
+```{r activity summary}
+summary(stepsPerDay$steps)
+
+```
 
 
+Mean of steps.
+```{r steps mean}
+mean(activityDataSet$steps)
+```
+
+Median of steps.
+```{r steps median}
+median(activityDataSet$steps)
+
+```
 
 ## What is the average daily activity pattern?
 
+```{r daily activity pattern}
+meanActivity <- aggregate(steps ~ interval , activityDataSet , mean)
+ggplot(meanActivity, aes(x=interval, y = steps)) + geom_line()
 
+```
+
+ Which 5-minute interval, on average across all the days in the data set, contains the maximum number of steps?
+
+```{r Maximum steps in  5-minute interval}
+
+arrange(meanActivity, -steps)[1,]
+
+```
 
 ## Imputing missing values
 
+There are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
 
+Calculate and report the total number of missing values in the data set (i.e. the total number of rows with NAs)
+
+```{r Total number of missing values}
+
+sum( is.na(activityDataSet$steps ))
+
+```
+
+Devise a strategy for filling in all of the missing values in the data set. 
+
+```{r Strategy for filling in all of the missing values}
+
+activityDataSetCopy <- activityDataSet
+meanInterval <- aggregate(steps~interval, activityDataSet, mean)
+
+```
+
+Create a new data set that is equal to the original data set but with the missing data filled in.
+
+```{r Fill missing values with mean}
+
+for(i in 1:nrow(activityDataSetCopy)){
+  if(is.na(activityDataSetCopy[i,1])){
+     rowNo <- which(meanInterval$interval==activityDataSetCopy[i,]$interval)
+    activityDataSetCopy[i,1] <- meanInterval[ rowNo, ]$steps
+  }
+}
+
+```   
+
+Histogram of the total number of steps taken each day after imputing missing values
+
+```{r Histogram of the total number of steps taken each day after imputing missing values}
+
+sumSteps2 <- aggregate(steps~date, data= activityDataSetCopy, sum)
+ggplot(sumSteps2, aes(steps)) + geom_histogram(bins=30) 
+
+```
+
+
+Mean after imputing missing values
+
+```{r Mean after imputing missing values}
+
+mean(sumSteps2$steps)
+
+```
+
+Median after imputing missing values
+
+```{r Median after imputing missing values}
+
+median(sumSteps2$steps)
+
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+
+```{r preparing data set to plot after imputing NAs, echo=TRUE}
+activityDataSet2 <- activityDataSet
+activityDataSet2$day <- weekdays(   as.Date(activityDataSet2$date) )
+activityDataSet2$day2[activityDataSet2$day=="Saturday" | activityDataSet2$day=="Sunday"] <- "Weekend"
+activityDataSet2$day2[is.na(activityDataSet2$day2) ] <- "Weekday"
+
+activityDataSet2 <- aggregate(steps~interval + day2, activityDataSet2, mean)
+```
+
+
+```{r Total number of steps taken each day after imputing values}
+
+ggplot(activityDataSet2,aes(x=interval, y=steps)) + facet_grid(day2~.) + geom_line()
+
+```
